@@ -110,6 +110,7 @@ onnx==1.19.1
 onnxruntime==1.23.2
 opencv-python==4.12.0.88
 osrf-pycommon==2.1.6
+paho-mqtt==1.6.1
 packaging==25.0
 pcl-msgs==1.0.0
 pendulum-msgs==0.20.5
