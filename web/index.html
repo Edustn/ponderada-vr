@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Experiência VR - Balões</title>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #050505;
+        color: #f4f4f4;
+      }
+
+      #overlay {
+        position: absolute;
+        top: 1.5rem;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        z-index: 10;
+        max-width: 90vw;
+        color: #6d52c3;
+        text-shadow: 0 2px 6px rgba(255, 255, 255, 0.45);
+      }
+
+      a-scene {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #overlay h1 {
+        font-size: 1.2rem;
+        margin-bottom: 0.35rem;
+      }
+
+      #overlay p {
+        margin: 0.2rem 0;
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <h1>Protótipo VR dos Balões</h1>
+      <p>Abra esta página dentro do browser do Quest e selecione “Enter VR”.</p>
+      <p>
+        Aponte o controlador para um balão e aperte o gatilho para estourá-lo.
+      </p>
+    </div>
+
+    <a-scene
+      background="color: #0b0b15"
+      renderer="colorManagement: true"
+      xr-mode-ui="enabled: true"
+      embedded
+      balloon-game
+    >
+      <a-assets>
+        <a-mixin
+          id="balloon-shape"
+          geometry="primitive: sphere; radius: 0.25"
+          material="metalness: 0.05; roughness: 0.5"
+        ></a-mixin>
+        <a-mixin
+          id="string-shape"
+          geometry="primitive: cylinder; height: 0.6; radius: 0.01"
+          material="color: #f5f5f5"
+          position="0 -0.5 0"
+        ></a-mixin>
+      </a-assets>
+
+      <a-sky color="#e8e0ff"></a-sky>
+      <a-entity storybook-scene></a-entity>
+
+      <a-entity position="0 4 -4" light="type: ambient; intensity: 0.5"></a-entity>
+      <a-entity
+        position="2 3 1"
+        light="type: spot; intensity: 0.9; angle: 35"
+      ></a-entity>
+      <a-entity
+        position="-3 2 -2"
+        light="type: spot; intensity: 0.7; angle: 40"
+      ></a-entity>
+
+      <a-entity id="rig" position="0 1.6 2">
+        <a-entity camera look-controls wasd-controls position="0 0 0"></a-entity>
+        <a-entity
+          id="left-controller"
+          laser-controls="hand: left"
+          raycaster="objects: .balloon-target; far: 8"
+          line="color: #73ffea; opacity: 0.75"
+          laser-shooter
+        ></a-entity>
+        <a-entity
+          id="right-controller"
+          laser-controls="hand: right"
+          raycaster="objects: .balloon-target; far: 8"
+          line="color: #73ffea; opacity: 0.75"
+          laser-shooter
+        ></a-entity>
+      </a-entity>
+
+      <a-entity id="ui-layer" position="0 1.6 -1.7">
+        <a-entity
+          id="message-board"
+          position="0 0 0"
+          text="value: Aguarde o reconhecimento...; width: 6; align: center; font: https://cdn.aframe.io/fonts/Exo2Bold.fnt; color: #f06d9c"
+        ></a-entity>
+        <a-entity
+          id="status-board"
+          position="0 -0.35 0"
+          text="value: Balões aparecerão assim que o rosto for reconhecido.; width: 4; align: center; color: #2c7f7e"
+        ></a-entity>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      const BALLOON_CONFIG = [
+        {
+          position: "-2.4 2.2 -3.2",
+          color: "#ff5f5f",
+          message: "Mensagem 1 - Bem-vinda!",
+        },
+        {
+          position: "-0.5 3.1 -4.2",
+          color: "#ffdd57",
+          message: "Mensagem 2 - Continue!",
+        },
+        {
+          position: "1.4 2.3 -3.4",
+          color: "#7afcff",
+          message: "Mensagem 3 - Quase lá!",
+        },
+        {
+          position: "2.6 2.6 -4.6",
+          color: "#ff8ef4",
+          message: "Mensagem 4 - Último balão!",
+          isFinal: true,
+        },
+      ];
+
+      AFRAME.registerComponent("laser-shooter", {
+        init() {
+          this.onShoot = this.onShoot.bind(this);
+          this.el.addEventListener("triggerdown", this.onShoot);
+        },
+        onShoot() {
+          const raycaster = this.el.components.raycaster;
+          if (!raycaster || !raycaster.intersections.length) {
+            return;
+          }
+          const hit = raycaster.intersections[0];
+          const targetEl = hit.object.el;
+          if (!targetEl) return;
+          const balloonEl = targetEl.closest("[balloon-target]");
+          if (balloonEl) {
+            balloonEl.emit("hit-by-laser");
+          }
+        },
+        remove() {
+          this.el.removeEventListener("triggerdown", this.onShoot);
+        },
+      });
+
+      AFRAME.registerComponent("balloon-target", {
+        init() {
+          this.el.classList.add("balloon-target");
+          this.popped = false;
+          this.el.addEventListener("hit-by-laser", () => {
+            if (this.popped) return;
+            this.popped = true;
+            const game = this.el.sceneEl.components["balloon-game"];
+            if (game) {
+              game.handleBalloonPop(this.el);
+            }
+          });
+        },
+      });
+
+      AFRAME.registerComponent("storybook-scene", {
+        init() {
+          this.el.setAttribute("position", "0 0 0");
+          this.buildGround();
+          this.buildFerrisWheel();
+          this.buildVillage();
+          this.buildTrees();
+          this.buildDecor();
+        },
+        buildGround() {
+          const base = document.createElement("a-cylinder");
+          base.setAttribute("radius", 7);
+          base.setAttribute("height", 0.2);
+          base.setAttribute("color", "#c3ffcb");
+          base.setAttribute("position", "0 -0.1 -4.5");
+          base.setAttribute("material", "roughness: 0.9; metalness: 0");
+          this.el.appendChild(base);
+
+          const path = document.createElement("a-plane");
+          path.setAttribute("rotation", "-90 0 0");
+          path.setAttribute("width", 1.4);
+          path.setAttribute("height", 6);
+          path.setAttribute("position", "0 0.02 -1.6");
+          path.setAttribute("color", "#ffe4b5");
+          path.setAttribute("material", "roughness: 0.7");
+          this.el.appendChild(path);
+        },
+        buildFerrisWheel() {
+          const wheel = document.createElement("a-entity");
+          wheel.setAttribute("position", "0 2.4 -5.2");
+          const ring = document.createElement("a-torus");
+          ring.setAttribute("radius", 2.4);
+          ring.setAttribute("radius-tubular", 0.06);
+          ring.setAttribute("color", "#fdd880");
+          ring.setAttribute("material", "metalness: 0.1; roughness: 0.4");
+          wheel.appendChild(ring);
+
+          const hub = document.createElement("a-cylinder");
+          hub.setAttribute("radius", 0.28);
+          hub.setAttribute("height", 0.4);
+          hub.setAttribute("color", "#ffeaa7");
+          hub.setAttribute("rotation", "0 90 0");
+          wheel.appendChild(hub);
+
+          for (let i = 0; i < 8; i++) {
+            const spoke = document.createElement("a-cylinder");
+            spoke.setAttribute("radius", 0.04);
+            spoke.setAttribute("height", 2.2);
+            spoke.setAttribute("color", "#fdd37b");
+            spoke.setAttribute("rotation", `0 0 ${(360 / 8) * i}`);
+            wheel.appendChild(spoke);
+          }
+
+          const podColors = [
+            "#ff9aa2",
+            "#ffdac1",
+            "#e2f0cb",
+            "#b5ead7",
+            "#c7ceea",
+            "#fbcffc",
+            "#ffd6e0",
+            "#f2f5ff",
+          ];
+          podColors.forEach((color, index) => {
+            const angle = (index / podColors.length) * Math.PI * 2;
+            const x = Math.cos(angle) * 2.2;
+            const y = Math.sin(angle) * 2.2;
+            const pod = document.createElement("a-entity");
+            pod.setAttribute("position", `${x} ${y} 0`);
+
+            const basket = document.createElement("a-entity");
+            basket.setAttribute("geometry", "primitive: box; depth: 0.2; height: 0.35; width: 0.4");
+            basket.setAttribute("material", `color: ${color}; roughness: 0.5`);
+            basket.setAttribute("position", "0 -0.25 0");
+            pod.appendChild(basket);
+
+            const roof = document.createElement("a-cone");
+            roof.setAttribute("height", 0.35);
+            roof.setAttribute("radius-bottom", 0.25);
+            roof.setAttribute("radius-top", 0.02);
+            roof.setAttribute("color", "#fce1ff");
+            pod.appendChild(roof);
+
+            wheel.appendChild(pod);
+          });
+
+          wheel.setAttribute("animation__rotate", {
+            property: "rotation",
+            to: "0 0 360",
+            loop: true,
+            dur: 45000,
+            easing: "linear",
+          });
+          this.el.appendChild(wheel);
+        },
+        buildVillage() {
+          const createTent = (position, bodyColor, roofColor) => {
+            const tent = document.createElement("a-entity");
+            tent.setAttribute("position", position);
+            const body = document.createElement("a-cylinder");
+            body.setAttribute("radius", 0.5);
+            body.setAttribute("height", 0.7);
+            body.setAttribute("color", bodyColor);
+            tent.appendChild(body);
+            const roof = document.createElement("a-cone");
+            roof.setAttribute("radius-bottom", 0.65);
+            roof.setAttribute("height", 0.9);
+            roof.setAttribute("color", roofColor);
+            roof.setAttribute("position", "0 0.8 0");
+            tent.appendChild(roof);
+            this.el.appendChild(tent);
+          };
+
+          createTent("-3.2 0.35 -5.5", "#9ad1ff", "#ffd6e0");
+          createTent("3.2 0.35 -5.2", "#ffd166", "#cdb4db");
+          createTent("-2 0.35 -3.6", "#caffbf", "#ffafcc");
+
+          const castle = document.createElement("a-entity");
+          castle.setAttribute("position", "0 0 -3.5");
+          const base = document.createElement("a-box");
+          base.setAttribute("depth", 1.4);
+          base.setAttribute("height", 1.3);
+          base.setAttribute("width", 1.6);
+          base.setAttribute("color", "#ffe8c5");
+          castle.appendChild(base);
+          const door = document.createElement("a-box");
+          door.setAttribute("depth", 0.1);
+          door.setAttribute("height", 0.8);
+          door.setAttribute("width", 0.5);
+          door.setAttribute("color", "#fca652");
+          door.setAttribute("position", "0 -0.1 0.71");
+          castle.appendChild(door);
+          const tower = document.createElement("a-cylinder");
+          tower.setAttribute("radius", 0.35);
+          tower.setAttribute("height", 1.6);
+          tower.setAttribute("color", "#ffddbf");
+          tower.setAttribute("position", "0 1.4 0");
+          castle.appendChild(tower);
+          const towerRoof = document.createElement("a-cone");
+          towerRoof.setAttribute("radius-bottom", 0.5);
+          towerRoof.setAttribute("height", 0.9);
+          towerRoof.setAttribute("color", "#7db2ff");
+          towerRoof.setAttribute("position", "0 2.2 0");
+          castle.appendChild(towerRoof);
+          this.el.appendChild(castle);
+
+          const createStall = (position, baseColor, canopyColor) => {
+            const stall = document.createElement("a-entity");
+            stall.setAttribute("position", position);
+            const counter = document.createElement("a-box");
+            counter.setAttribute("width", 1.2);
+            counter.setAttribute("height", 0.6);
+            counter.setAttribute("depth", 0.8);
+            counter.setAttribute("color", baseColor);
+            stall.appendChild(counter);
+            const canopy = document.createElement("a-entity");
+            canopy.setAttribute(
+              "geometry",
+              "primitive: box; width: 1.25; height: 0.25; depth: 0.85"
+            );
+            canopy.setAttribute(
+              "material",
+              `color: ${canopyColor}; opacity: 0.95; metalness: 0.05`
+            );
+            canopy.setAttribute("position", "0 0.5 0");
+            stall.appendChild(canopy);
+            const poles = document.createElement("a-entity");
+            for (let i = 0; i < 4; i++) {
+              const pole = document.createElement("a-cylinder");
+              pole.setAttribute("radius", 0.03);
+              pole.setAttribute("height", 0.7);
+              pole.setAttribute("color", "#ffd6a5");
+              const px = i < 2 ? -0.55 : 0.55;
+              const pz = i % 2 === 0 ? -0.35 : 0.35;
+              pole.setAttribute("position", `${px} 0 ${pz}`);
+              poles.appendChild(pole);
+            }
+            stall.appendChild(poles);
+            this.el.appendChild(stall);
+          };
+
+          createStall("-3.5 0.3 -2.6", "#ffadad", "#ffe066");
+          createStall("3.7 0.3 -2.8", "#9bf6ff", "#caffbf");
+          createStall("1.6 0.3 -4.2", "#fdffb6", "#bdb2ff");
+        },
+        buildTrees() {
+          const createTree = (position, scale = 1) => {
+            const tree = document.createElement("a-entity");
+            tree.setAttribute("position", position);
+            const trunk = document.createElement("a-cylinder");
+            trunk.setAttribute("radius", 0.08 * scale);
+            trunk.setAttribute("height", 0.5 * scale);
+            trunk.setAttribute("color", "#b5835a");
+            trunk.setAttribute("position", `0 ${0.25 * scale} 0`);
+            tree.appendChild(trunk);
+            const foliage = document.createElement("a-sphere");
+            foliage.setAttribute("radius", 0.35 * scale);
+            foliage.setAttribute("color", "#9bf6ff");
+            foliage.setAttribute("position", `0 ${0.6 * scale} 0`);
+            tree.appendChild(foliage);
+            this.el.appendChild(tree);
+          };
+
+          [
+            "-4 0 -5",
+            "-3 0 -4",
+            "-2 0 -6",
+            "2 0 -4.5",
+            "3.5 0 -5.5",
+            "4 0 -3.8",
+            "-1 0 -5.8",
+            "1 0 -6.2",
+          ].forEach((pos, idx) =>
+            createTree(pos, idx % 2 === 0 ? 1 : 0.8)
+          );
+        },
+        buildDecor() {
+          const sun = document.createElement("a-sphere");
+          sun.setAttribute("position", "-3 4 -6");
+          sun.setAttribute("radius", 0.7);
+          sun.setAttribute("color", "#ffd66b");
+          sun.setAttribute("material", "emissive: #ff9f1c; emissiveIntensity: 0.5");
+          this.el.appendChild(sun);
+
+          const cloudColors = ["#ffffff", "#f8f1ff", "#f1f1ff"];
+          const createCloud = (position, scale = 1) => {
+            const cloud = document.createElement("a-entity");
+            cloud.setAttribute("position", position);
+            const sphereCount = 4 + Math.floor(Math.random() * 3);
+            for (let i = 0; i < sphereCount; i++) {
+              const puff = document.createElement("a-sphere");
+              const offsetX = (Math.random() - 0.5) * 0.6 * scale;
+              const offsetY = (Math.random() - 0.5) * 0.3 * scale;
+              const offsetZ = (Math.random() - 0.5) * 0.5 * scale;
+              puff.setAttribute("radius", 0.35 * scale * (0.8 + Math.random() * 0.4));
+              puff.setAttribute("color", cloudColors[i % cloudColors.length]);
+              puff.setAttribute("opacity", 0.92);
+              puff.setAttribute("position", `${offsetX} ${offsetY} ${offsetZ}`);
+              cloud.appendChild(puff);
+            }
+            cloud.setAttribute("animation__float", {
+              property: "position",
+              to: `${position.split(" ")[0]} ${parseFloat(position.split(" ")[1]) + 0.15} ${position.split(" ")[2]}`,
+              dir: "alternate",
+              loop: true,
+              dur: 8000 + Math.random() * 2000,
+              easing: "easeInOutSine",
+            });
+            this.el.appendChild(cloud);
+          };
+
+          createCloud("-4 3.2 -5.5", 1.2);
+          createCloud("2.5 3.5 -5", 0.9);
+          createCloud("0 4 -6.5", 1.4);
+
+          for (let i = 0; i < 12; i++) {
+            const star = document.createElement("a-entity");
+            const x = (Math.random() - 0.5) * 6;
+            const y = 3 + Math.random() * 2;
+            const z = -6 - Math.random() * 1.5;
+            star.setAttribute("position", `${x} ${y} ${z}`);
+            star.setAttribute(
+              "geometry",
+              "primitive: triangle; vertexA: 0 0.12 0; vertexB: -0.12 -0.12 0; vertexC: 0.12 -0.12 0"
+            );
+            star.setAttribute(
+              "material",
+              "color: #fff4d9; side: double; opacity: 0.9"
+            );
+            star.setAttribute("rotation", `0 0 ${Math.random() * 360}`);
+            this.el.appendChild(star);
+          }
+        },
+      });
+
+      AFRAME.registerComponent("heart-model", {
+        schema: {
+          color: { default: "#ff2d55" },
+        },
+        init() {
+          const shape = new THREE.Shape();
+          const x = 0,
+            y = 0;
+          // Shape adapted from the official three.js Heart example.
+          shape.moveTo(x + 0.25, y + 0.25);
+          shape.bezierCurveTo(x + 0.05, y, x - 0.3, y + 0.35, x + 0.25, y + 0.7);
+          shape.bezierCurveTo(x + 0.8, y + 0.35, x + 0.45, y, x + 0.25, y + 0.25);
+
+          const extrudeSettings = {
+            depth: 0.18,
+            bevelEnabled: true,
+            bevelSegments: 4,
+            steps: 2,
+            bevelSize: 0.03,
+            bevelThickness: 0.04,
+          };
+
+          const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+          geometry.center();
+          geometry.rotateZ(Math.PI);
+          geometry.rotateY(Math.PI);
+
+          const material = new THREE.MeshStandardMaterial({
+            color: this.data.color,
+            metalness: 0.25,
+            roughness: 0.35,
+          });
+
+          this.mesh = new THREE.Mesh(geometry, material);
+          this.mesh.castShadow = true;
+          this.el.setObject3D("mesh", this.mesh);
+        },
+        remove() {
+          if (this.mesh) {
+            this.el.removeObject3D("mesh");
+            this.mesh.geometry.dispose();
+            this.mesh.material.dispose();
+          }
+        },
+      });
+
+      AFRAME.registerComponent("balloon-game", {
+        schema: {},
+        init() {
+          this.currentIndex = 0;
+          this.spawned = [];
+          this.messageEl = document.getElementById("message-board");
+          this.statusEl = document.getElementById("status-board");
+          this.heartEl = null;
+          this.messageHideTimeout = null;
+          this.configs = BALLOON_CONFIG;
+          this.remainingBalloons = this.configs.length;
+          this.startRound();
+          window.startBalloonRound = () => this.startRound();
+        },
+        startRound() {
+          this.teardown();
+          this.currentIndex = 0;
+          this.remainingBalloons = this.configs.length;
+          this.statusEl.setAttribute(
+            "text",
+            "value: Aponte o laser para um balão e use o gatilho."
+          );
+          this.configs.forEach((config, index) =>
+            this.spawnBalloon(config, index)
+          );
+        },
+        spawnBalloon(config, index) {
+          const balloon = document.createElement("a-entity");
+          balloon.setAttribute("position", config.position);
+          balloon.setAttribute("balloon-target", "");
+          balloon.setAttribute(
+            "geometry",
+            "primitive: sphere; radius: 0.35"
+          );
+          balloon.setAttribute(
+            "material",
+            "color: #ffffff; opacity: 0; transparent: true"
+          );
+          balloon.balloonConfig = { ...config, index };
+          balloon.setAttribute("animation__float", {
+            property: "position",
+            dir: "alternate",
+            dur: 2600 + index * 200,
+            easing: "easeInOutSine",
+            to: this.offsetPosition(config.position, 0.4),
+            loop: true,
+          });
+
+          const shape = document.createElement("a-entity");
+          shape.setAttribute("mixin", "balloon-shape");
+          shape.setAttribute("material", `color: ${config.color}`);
+          balloon.appendChild(shape);
+
+          const stringPiece = document.createElement("a-entity");
+          stringPiece.setAttribute("mixin", "string-shape");
+          balloon.appendChild(stringPiece);
+
+          this.el.appendChild(balloon);
+          this.spawned.push(balloon);
+        },
+        offsetPosition(positionString, deltaY) {
+          const [x, y, z] = positionString.split(" ").map(Number);
+          return `${x} ${y + deltaY} ${z}`;
+        },
+        handleBalloonPop(balloonEl) {
+          this.animatePop(balloonEl);
+          const config = balloonEl.balloonConfig || {};
+          const message =
+            config.message || `Mensagem ${this.currentIndex + 1}`;
+          this.showMessage(message);
+          this.remainingBalloons = Math.max(
+            0,
+            this.remainingBalloons - 1
+          );
+          const remaining = this.remainingBalloons;
+          if (remaining === 0) {
+            this.statusEl.setAttribute(
+              "text",
+              "value: Último balão! Prepare-se para o coração."
+            );
+            this.pulseText(this.statusEl, 0.9);
+            this.revealHeart();
+          } else {
+            this.statusEl.setAttribute(
+              "text",
+              `value: Restam ${
+                remaining
+              } balões.`
+            );
+            this.pulseText(this.statusEl, 0.8);
+          }
+          this.currentIndex++;
+        },
+        animatePop(balloonEl) {
+          const worldPos = new THREE.Vector3();
+          balloonEl.object3D.getWorldPosition(worldPos);
+          balloonEl.setAttribute("animation__popscale", {
+            property: "scale",
+            to: "1.4 1.4 1.4",
+            dur: 120,
+            easing: "easeOutQuad",
+          });
+          balloonEl.setAttribute("animation__fade", {
+            property: "opacity",
+            to: 0,
+            dur: 140,
+            easing: "easeOutQuad",
+          });
+          setTimeout(() => {
+            if (balloonEl.parentNode) {
+              balloonEl.parentNode.removeChild(balloonEl);
+            }
+          }, 160);
+          this.spawnPopBurst(worldPos, balloonEl.balloonConfig);
+        },
+        spawnPopBurst(worldPos, config = {}) {
+          const burst = document.createElement("a-entity");
+          burst.setAttribute(
+            "position",
+            `${worldPos.x} ${worldPos.y} ${worldPos.z}`
+          );
+          const palette = [
+            config.color || "#ff5f5f",
+            "#ffe45c",
+            "#7afcff",
+            "#ff8ef4",
+            "#f4978e",
+            "#a5ffd6",
+          ];
+          for (let i = 0; i < 8; i++) {
+            const piece = document.createElement("a-sphere");
+            piece.setAttribute("radius", 0.05 + Math.random() * 0.02);
+            piece.setAttribute(
+              "color",
+              palette[i % palette.length]
+            );
+            piece.setAttribute("opacity", 0.9);
+            const direction = new THREE.Vector3(
+              (Math.random() - 0.5) * 2,
+              Math.random() * 1.4,
+              (Math.random() - 0.5) * 2
+            ).normalize();
+            const distance = 0.6 + Math.random() * 0.5;
+            const target = direction.multiplyScalar(distance);
+            piece.setAttribute("animation__shoot", {
+              property: "position",
+              to: `${target.x} ${target.y} ${target.z}`,
+              dur: 620,
+              easing: "easeOutQuad",
+            });
+            piece.setAttribute("animation__fade", {
+              property: "opacity",
+              to: 0,
+              dur: 650,
+              easing: "easeInQuad",
+            });
+            piece.setAttribute("animation__scale", {
+              property: "scale",
+              to: "0.3 0.3 0.3",
+              dur: 650,
+              easing: "easeOutQuad",
+            });
+            burst.appendChild(piece);
+          }
+          this.el.appendChild(burst);
+          setTimeout(() => {
+            if (burst.parentNode) burst.parentNode.removeChild(burst);
+          }, 700);
+        },
+        showMessage(textValue) {
+          if (this.messageHideTimeout) {
+            clearTimeout(this.messageHideTimeout);
+            this.messageHideTimeout = null;
+          }
+          this.messageEl.setAttribute("visible", true);
+          this.messageEl.setAttribute(
+            "text",
+            `value: ${textValue}; width: 6; align: center; wrapCount: 18; opacity: 1; color: #f06d9c`
+          );
+          this.pulseText(this.messageEl, 1.2, true);
+        },
+        pulseText(targetEl, baseScale = 1, autoHide = false) {
+          targetEl.setAttribute(
+            "scale",
+            `${0.6 * baseScale} ${0.6 * baseScale} ${0.6 * baseScale}`
+          );
+          targetEl.setAttribute("animation__textpop", {
+            property: "scale",
+            to: `${1 * baseScale} ${1 * baseScale} ${1 * baseScale}`,
+            dur: 420,
+            easing: "easeOutElastic",
+          });
+          targetEl.setAttribute("animation__textflash", {
+            property: "text.opacity",
+            from: 0.2,
+            to: 1,
+            dur: 260,
+            easing: "easeOutQuad",
+          });
+          if (autoHide) {
+            targetEl.setAttribute("animation__textfadeout", {
+              property: "text.opacity",
+              delay: 2000,
+              to: 0,
+              dur: 500,
+              easing: "easeInQuad",
+            });
+            this.messageHideTimeout = setTimeout(() => {
+              targetEl.setAttribute("visible", false);
+              this.messageHideTimeout = null;
+            }, 2600);
+          }
+        },
+        revealHeart() {
+          if (this.heartEl) return;
+          const heart = document.createElement("a-entity");
+          heart.setAttribute("id", "heart-reward");
+          heart.setAttribute("position", "0 1.8 -2.3");
+          heart.setAttribute("scale", "1.6 1.6 1.6");
+          heart.setAttribute("heart-model", "color: #ff2d55");
+          heart.setAttribute("rotation", "0 0 0");
+          heart.setAttribute("animation__spin", {
+            property: "rotation",
+            to: "0 360 0",
+            loop: true,
+            dur: 6000,
+            easing: "linear",
+          });
+          heart.setAttribute("animation__float", {
+            property: "position",
+            dir: "alternate",
+            dur: 2400,
+            to: "0 1.92 -2.3",
+            loop: true,
+            easing: "easeInOutSine",
+          });
+
+          this.el.appendChild(heart);
+          this.heartEl = heart;
+          this.statusEl.setAttribute(
+            "text",
+            "value: Surpresa entregue! Reinicie quando quiser."
+          );
+        },
+        teardown() {
+          this.spawned.forEach((entity) => {
+            if (entity.parentNode) {
+              entity.parentNode.removeChild(entity);
+            }
+          });
+          this.spawned = [];
+          if (this.heartEl && this.heartEl.parentNode) {
+            this.heartEl.parentNode.removeChild(this.heartEl);
+          }
+          this.heartEl = null;
+        },
+      });
+    </script>
+  </body>
+</html>

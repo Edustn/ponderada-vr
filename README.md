@@ -49,6 +49,33 @@ Se estiver usando outro broker/tópico, altere `BROKER`, `PORT`, `TOPIC`, `CLIEN
 3. Resultado é desenhado na tela e publicado via MQTT (`1`/`0`).
 4. Um cliente MQTT (Raspberry Pi Pico W, outro microcontrolador ou mesmo um dashboard) reage ligando/desligando o LED.
 
+## Protótipo VR em A-Frame
+A pasta `web/` contém o primeiro rascunho da cena VR/AR que será exibida no Meta Quest. Ela foi criada em cima do A-Frame (WebXR) e já implementa:
+- Spawn de quatro balões animados, cada um com texto associado.
+- Controle por laser (`laser-controls`) nos dois handsets — basta mirar e apertar o gatilho para estourar.
+- Sequenciamento das mensagens e, no fim, um coração 3D simples construído com primitivas.
+- Função global `window.startBalloonRound()` para reiniciar o jogo quando o backend detectar o rosto.
+- Um cenário “storybook” com roda-gigante, casinhas, árvores e sol estilizado construídos com primitivas A-Frame.
+
+### Como testar localmente
+```bash
+cd web
+python -m http.server 5500
+```
+1. Abra `http://<ip-da-sua-máquina>:5500` no navegador do Quest (ou no desktop para depurar).
+2. Clique em “Enter VR”. Você verá os controladores virtuais com lasers verdes.
+3. Mire nos balões e aperte o gatilho; as mensagens vão mudando e, após o último balão, aparece o coração.
+
+### Integração com o reconhecimento facial
+- O `face_realtime.py` continua como fonte da verdade publicando no MQTT.
+- Um pequeno backend (Python/Node) pode assinar o mesmo tópico e, quando receber `1`, disparar `startBalloonRound()` via WebSocket para a página aberta no Quest.
+- Assim que o evento chegar via WebSocket, basta chamar `window.startBalloonRound()` para exibir novamente os balões e mensagens.
+
+Esse fluxo mantém o reconhecimento desacoplado e permite evoluir o front com animações, assets glTF ou mesmo AR pass-through sem tocar no pipeline de InsightFace/MQTT.
+
+### Assets da cena
+- Se quiser complementar com texturas ou modelos externos, coloque-os em `web/assets/` e referencie na tag `<a-assets>`.
+
 ## Dicas e solução de problemas
 - **Latência no broker**: se o LED demorar a responder, teste primeiro o tópico com `mosquitto_sub`/`mosquitto_pub` ou outro cliente MQTT para garantir conectividade.
 - **Detecção instável**: ajuste `SIMILARITY_THRESHOLD` (valores mais baixos deixam o reconhecimento mais permissivo).
