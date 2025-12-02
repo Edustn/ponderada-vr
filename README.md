@@ -66,6 +66,22 @@ python -m http.server 5500
 2. Clique em “Enter VR”. Você verá os controladores virtuais com lasers verdes.
 3. Mire nos balões e aperte o gatilho; as mensagens vão mudando e, após o último balão, aparece o coração.
 
+#### Servindo com Caddy via Docker
+Se preferir subir a cena com o `Caddyfile` existente, entre primeiro na pasta `web/` e então execute:
+```bash
+cd web
+docker run -d --rm \
+  --name caddy-server \
+  -p 8080:80 \
+  -p 4430:443 \
+  -v $(pwd)/Caddyfile:/etc/caddy/Caddyfile \
+  -v $(pwd):/usr/share/caddy \
+  -v caddy_data:/data \
+  -v caddy_config:/config \
+  caddy:latest
+```
+Isso inicia o Caddy em segundo plano usando o `Caddyfile` da pasta `web/`. Acesse `http://localhost:8080` (ou `https://0.0.0.0:4430/index.html`) e finalize com `docker stop caddy-server` quando terminar.
+
 ### Integração com o reconhecimento facial
 - O `face_realtime.py` continua como fonte da verdade publicando no MQTT.
 - Um pequeno backend (Python/Node) pode assinar o mesmo tópico e, quando receber `1`, disparar `startBalloonRound()` via WebSocket para a página aberta no Quest.
